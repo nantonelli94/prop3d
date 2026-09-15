@@ -1,0 +1,8 @@
+streamlit
+numpy
+scipy
+pyvista
+stpyvista
+trame
+trame-vtk
+trame-vuetify
