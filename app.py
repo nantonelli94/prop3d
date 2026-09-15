@@ -4,10 +4,10 @@ import pyvista as pv
 import plotly.graph_objects as go
 
 # Configuración de página
-st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="wide")
+st.set_page_config(page_title="Generador de Hélices Paramétricas 3D - UTN FRMDP", layout="wide")
 
 # ==========================================
-# ESTILO CSS: FONDO GRIS PARA LA APLICACIÓN WEB
+# ESTILO CSS: FONDO GRIS Y TEXTO INSTITUCIONAL
 # ==========================================
 st.markdown(
     """
@@ -19,10 +19,33 @@ st.markdown(
     section[data-testid="stSidebar"] {
         background-color: #262626;
     }
+    .text-center {
+        text-align: center;
+    }
+    .sub-caption {
+        text-align: center;
+        font-style: italic;
+        color: #aaaaaa;
+        font-size: 0.9em;
+        margin-bottom: 15px;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+# ==========================================
+# ENCABEZADO INSTITUCIONAL Y LOGO
+# ==========================================
+col_logo_izq, col_logo_centro, col_logo_der = st.columns([35, 30, 35])
+with col_logo_centro:
+    try:
+        st.image("logo_tdb2.jpg", use_container_width=True)
+    except:
+        pass
+
+st.markdown("<h2 class='text-center'>UTN FRMDP — Cátedra Teoría del Buque 2</h2>", unsafe_allow_html=True)
+st.markdown("<p class='sub-caption'>⚠️ Herramienta interactiva desarrollada exclusivamente con fines didácticos</p>", unsafe_allow_html=True)
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
@@ -51,7 +74,7 @@ st.sidebar.subheader("📐 Relación Paso / Diámetro (P/D)")
 PD_global = st.sidebar.slider("Paso / Diámetro (P/D)", min_value=0.5, max_value=1.8, value=1.0, step=0.05)
 
 # ==========================================
-# CÁLCULO GEOMÉTRICO CON ALTA RESOLUCIÓN
+# CÁLCULO GEOMÉTRICO
 # ==========================================
 def obtener_parametros(tipo, fskw_num):
     if tipo == 1: # Kaplan (Ka)
@@ -87,7 +110,6 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
         tmax = D_val * Ctmax[i]
         rake = np.tan(angrake) * rsR * (D_val / 2.0)
         
-        # Mayor resolución de puntos (60 en vez de 30) para curvas suaves
         t = np.linspace(0, 1, 60)
         x_perfil = c * (t - 0.5)
         
@@ -114,7 +136,6 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
     return np.array(secciones_pts)
 
 def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=64):
-    """Genera cono trunco con mayor densidad radial (64 puntos) para renderizado curvo suave"""
     y_vals = np.array([-largo/2, largo/2])
     r_vals = np.array([r_entrada, r_salida])
     theta = np.linspace(0, 2*np.pi, n_p, endpoint=False)
@@ -123,7 +144,6 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=64):
     z = list(np.outer(r_vals, np.sin(theta)).flatten())
     y = list(np.repeat(y_vals, n_p))
     
-    # Centros de las tapas
     x.extend([0.0, 0.0])
     y.extend([-largo/2, largo/2])
     z.extend([0.0, 0.0])
@@ -140,12 +160,10 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=64):
         r1_curr = idx + n_p
         r1_next = next_idx + n_p
         
-        # Pared lateral
         i_list.extend([r0_curr, r0_next])
         j_list.extend([r1_curr, r1_curr])
         k_list.extend([r0_next, r1_next])
         
-        # Tapas
         i_list.append(idx_centro_inf)
         j_list.append(r0_next)
         k_list.append(r0_curr)
@@ -156,7 +174,6 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=64):
         
     return x, y, z, i_list, j_list, k_list
 
-# Configuración de iluminación para superficies suaves
 iluminacion_suave = dict(
     ambient=0.45,
     diffuse=0.85,
@@ -170,7 +187,7 @@ iluminacion_suave = dict(
 # ==========================================
 fig = go.Figure()
 
-# 1. Cono Central Suavizado
+# 1. Cono Central
 largo_cono = D * 0.4
 r_ent = diametro_cono_ent / 2.0
 r_sal = diametro_cono_sal / 2.0
@@ -181,11 +198,11 @@ fig.add_trace(go.Mesh3d(
     x=x_c, y=y_c, z=z_c,
     i=i_c, j=j_c, k=k_c,
     color="gold", opacity=1.0, name="Cono Central",
-    flatshading=False, # Habilita sombreado Phong suave
+    flatshading=False,
     lighting=iluminacion_suave
 ))
 
-# 2. Palas de la Hélice Suavizadas
+# 2. Palas de la Hélice
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw, PD_global)
 
 n_sec, n_pts, _ = pala_pts.shape
@@ -204,11 +221,10 @@ for i in range(Z):
         x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
         color="deepskyblue", opacity=1.0, name=f"Pala {i+1}",
-        flatshading=False, # Habilita sombreado Phong suave
+        flatshading=False,
         lighting=iluminacion_suave
     ))
 
-# Configuración de fondo gris en el visor 3D
 fig.update_layout(
     paper_bgcolor="#1e1e1e",
     plot_bgcolor="#1e1e1e",
