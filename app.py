@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from scipy.interpolate import CubicSpline, polyfit
+from scipy.interpolate import CubicSpline
 import pyvista as pv
 from stpyvista import stpyvista
 
@@ -35,7 +35,7 @@ pd10 = st.sidebar.slider("P/D r/R=1.0", 0.5, 1.8, 1.0, 0.05)
 # Interpolación P/D
 x_pd = np.array([0.2, 0.7, 1.0])
 y_pd = np.array([pd02, pd07, pd10])
-poly_pd = polyfit(x_pd, y_pd, 2)
+poly_pd = np.polyfit(x_pd, y_pd, 2)
 
 def get_pd(r_R):
     return poly_pd[0]*(r_R**2) + poly_pd[1]*r_R + poly_pd[2]
