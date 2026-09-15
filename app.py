@@ -3,7 +3,26 @@ import numpy as np
 import pyvista as pv
 import plotly.graph_objects as go
 
+# Configuración de página
 st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="wide")
+
+# ==========================================
+# ESTILO CSS: FONDO GRIS PARA LA APLICACIÓN WEB
+# ==========================================
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #1e1e1e;
+        color: #e0e0e0;
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #262626;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
@@ -32,7 +51,7 @@ st.sidebar.subheader("📐 Relación Paso / Diámetro (P/D)")
 PD_global = st.sidebar.slider("Paso / Diámetro (P/D)", min_value=0.5, max_value=1.8, value=1.0, step=0.05)
 
 # ==========================================
-# CÁLCULO GEOMÉTRICO
+# CÁLCULO GEOMÉTRICO CON ALTA RESOLUCIÓN
 # ==========================================
 def obtener_parametros(tipo, fskw_num):
     if tipo == 1: # Kaplan (Ka)
@@ -42,7 +61,7 @@ def obtener_parametros(tipo, fskw_num):
         CSkew = [0.050, 0.028, 0.013, 0.006, 0.0, 0.0, 0.0, 0.0, 0.0]
         CSkew = [c * fskw_num for c in CSkew]
         Ctmax = [0.0450, 0.0400, 0.0352, 0.0300, 0.0245, 0.0190, 0.0138, 0.0092, 0.0061]
-    else: # Wageningen B (Termina en punta redondeada en r/R=1.0)
+    else: # Wageningen B
         angrake = np.pi / 12.0
         r_R_list = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.97, 1.0]
         K = [1.415, 1.662, 1.882, 2.050, 2.152, 2.187, 2.144, 1.970, 1.200, 0.050]
@@ -68,7 +87,8 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
         tmax = D_val * Ctmax[i]
         rake = np.tan(angrake) * rsR * (D_val / 2.0)
         
-        t = np.linspace(0, 1, 30)
+        # Mayor resolución de puntos (60 en vez de 30) para curvas suaves
+        t = np.linspace(0, 1, 60)
         x_perfil = c * (t - 0.5)
         
         yt = 5 * tmax * (0.2969*np.sqrt(t) - 0.1260*t - 0.3516*t**2 + 0.2843*t**3 - 0.1015*t**4)
@@ -93,8 +113,8 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
         
     return np.array(secciones_pts)
 
-def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
-    """Genera superficie lateral y tapas planas (entrada y salida) para cerrar el cono"""
+def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=64):
+    """Genera cono trunco con mayor densidad radial (64 puntos) para renderizado curvo suave"""
     y_vals = np.array([-largo/2, largo/2])
     r_vals = np.array([r_entrada, r_salida])
     theta = np.linspace(0, 2*np.pi, n_p, endpoint=False)
@@ -103,7 +123,7 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
     z = list(np.outer(r_vals, np.sin(theta)).flatten())
     y = list(np.repeat(y_vals, n_p))
     
-    # Agregar centros para las tapas
+    # Centros de las tapas
     x.extend([0.0, 0.0])
     y.extend([-largo/2, largo/2])
     z.extend([0.0, 0.0])
@@ -120,49 +140,59 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
         r1_curr = idx + n_p
         r1_next = next_idx + n_p
         
-        # Malla lateral
+        # Pared lateral
         i_list.extend([r0_curr, r0_next])
         j_list.extend([r1_curr, r1_curr])
         k_list.extend([r0_next, r1_next])
         
-        # Tapa Entrada
+        # Tapas
         i_list.append(idx_centro_inf)
         j_list.append(r0_next)
         k_list.append(r0_curr)
         
-        # Tapa Salida
         i_list.append(idx_centro_sup)
         j_list.append(r1_curr)
         k_list.append(r1_next)
         
     return x, y, z, i_list, j_list, k_list
 
+# Configuración de iluminación para superficies suaves
+iluminacion_suave = dict(
+    ambient=0.45,
+    diffuse=0.85,
+    fresnel=0.2,
+    specular=0.5,
+    roughness=0.3
+)
+
 # ==========================================
 # CONSTRUCCIÓN DE LA ESCENA EN PLOTLY
 # ==========================================
 fig = go.Figure()
 
-# 1. Cono Central Cerrado
+# 1. Cono Central Suavizado
 largo_cono = D * 0.4
 r_ent = diametro_cono_ent / 2.0
 r_sal = diametro_cono_sal / 2.0
 
-x_c, y_c, z_c, i_c, j_c, k_c = generar_datos_cono_trunco_cerrado(r_ent, r_sal, largo_cono)
+x_c, y_c, z_c, i_c, j_c, k_c = generar_datos_cono_trunco_cerrado(r_ent, r_sal, largo_cono, n_p=64)
 
 fig.add_trace(go.Mesh3d(
     x=x_c, y=y_c, z=z_c,
     i=i_c, j=j_c, k=k_c,
-    color="gold", opacity=1.0, name="Cono Central", flatshading=True
+    color="gold", opacity=1.0, name="Cono Central",
+    flatshading=False, # Habilita sombreado Phong suave
+    lighting=iluminacion_suave
 ))
 
-# 2. Palas de la Hélice
+# 2. Palas de la Hélice Suavizadas
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw, PD_global)
 
 n_sec, n_pts, _ = pala_pts.shape
 grid = pv.StructuredGrid()
 grid.points = pala_pts.reshape(-1, 3)
 grid.dimensions = [n_pts, n_sec, 1]
-grid_poly = grid.extract_surface().triangulate()
+grid_poly = grid.extract_surface().triangulate().compute_normals()
 
 angulo_pala = 360.0 / Z
 for i in range(Z):
@@ -173,11 +203,17 @@ for i in range(Z):
     fig.add_trace(go.Mesh3d(
         x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-        color="deepskyblue", opacity=1.0, name=f"Pala {i+1}", flatshading=True
+        color="deepskyblue", opacity=1.0, name=f"Pala {i+1}",
+        flatshading=False, # Habilita sombreado Phong suave
+        lighting=iluminacion_suave
     ))
 
+# Configuración de fondo gris en el visor 3D
 fig.update_layout(
+    paper_bgcolor="#1e1e1e",
+    plot_bgcolor="#1e1e1e",
     scene=dict(
+        bgcolor="#1e1e1e",
         aspectmode="data",
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
