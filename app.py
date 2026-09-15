@@ -35,29 +35,31 @@ PD_global = st.sidebar.slider("Paso / Diámetro (P/D)", min_value=0.5, max_value
 # CÁLCULO GEOMÉTRICO
 # ==========================================
 def obtener_parametros(tipo, fskw_num):
-    if tipo == 1: # Kaplan
+    if tipo == 1: # Kaplan (Ka)
         angrake = 0.0
-        K = [1.168, 1.322, 1.508, 1.677, 1.831, 1.970, 2.084, 2.167, 2.218, 2.219]
-        CSkew = [0.050, 0.028, 0.013, 0.006, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        r_R_list = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        K = [1.168, 1.322, 1.508, 1.677, 1.831, 1.970, 2.084, 2.167, 2.218]
+        CSkew = [0.050, 0.028, 0.013, 0.006, 0.0, 0.0, 0.0, 0.0, 0.0]
         CSkew = [c * fskw_num for c in CSkew]
-        Ctmax = [0.0450, 0.0400, 0.0352, 0.0300, 0.0245, 0.0190, 0.0138, 0.0092, 0.0061, 0.0050]
-    else: # Wageningen B
+        Ctmax = [0.0450, 0.0400, 0.0352, 0.0300, 0.0245, 0.0190, 0.0138, 0.0092, 0.0061]
+    else: # Wageningen B (Termina en punta redondeada en r/R=1.0)
         angrake = np.pi / 12.0
-        K = [1.415, 1.662, 1.882, 2.050, 2.152, 2.187, 2.144, 1.970, 1.582]
-        CSkew = [0.122, 0.117, 0.113, 0.101, 0.086, 0.061, 0.024, -0.037, -0.149]
+        r_R_list = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.97, 1.0]
+        K = [1.415, 1.662, 1.882, 2.050, 2.152, 2.187, 2.144, 1.970, 1.200, 0.050]
+        CSkew = [0.122, 0.117, 0.113, 0.101, 0.086, 0.061, 0.024, -0.037, -0.100, -0.149]
         CSkew = [c * fskw_num for c in CSkew]
-        Ctmax = [0.0408, 0.0366, 0.0324, 0.0282, 0.0240, 0.0198, 0.0156, 0.0114, 0.0072]
+        Ctmax = [0.0408, 0.0366, 0.0324, 0.0282, 0.0240, 0.0198, 0.0156, 0.0114, 0.0050, 0.0010]
     
-    return angrake, K, CSkew, Ctmax
+    return angrake, r_R_list, K, CSkew, Ctmax
 
 def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
-    angrake, K, CSkew, Ctmax = obtener_parametros(tipo, fskw_val)
+    angrake, r_R_list, K, CSkew, Ctmax = obtener_parametros(tipo, fskw_val)
     n_secciones = len(K)
     
     secciones_pts = []
     
     for i in range(n_secciones):
-        rsR = (i + 1.0) / 10.0
+        rsR = r_R_list[i]
         paso = pd_val * D_val
         alfa = np.arctan(paso / (np.pi * rsR * D_val))
         
@@ -101,7 +103,7 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
     z = list(np.outer(r_vals, np.sin(theta)).flatten())
     y = list(np.repeat(y_vals, n_p))
     
-    # Agregar centros para tapas
+    # Agregar centros para las tapas
     x.extend([0.0, 0.0])
     y.extend([-largo/2, largo/2])
     z.extend([0.0, 0.0])
@@ -118,7 +120,7 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
         r1_curr = idx + n_p
         r1_next = next_idx + n_p
         
-        # Malla lateral (2 triángulos)
+        # Malla lateral
         i_list.extend([r0_curr, r0_next])
         j_list.extend([r1_curr, r1_curr])
         k_list.extend([r0_next, r1_next])
@@ -140,7 +142,7 @@ def generar_datos_cono_trunco_cerrado(r_entrada, r_salida, largo, n_p=32):
 # ==========================================
 fig = go.Figure()
 
-# 1. Cono Central Cerrado (Con Tapas)
+# 1. Cono Central Cerrado
 largo_cono = D * 0.4
 r_ent = diametro_cono_ent / 2.0
 r_sal = diametro_cono_sal / 2.0
