@@ -8,7 +8,6 @@ st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
 
-# Configurar PyVista en modo sin pantalla
 pv.OFF_SCREEN = True
 
 # ==========================================
@@ -26,21 +25,11 @@ with col1:
 
 with col2:
     fskw = st.sidebar.slider("Factor Skew (Inclinación)", min_value=0.0, max_value=2.0, value=1.0, step=0.1)
-    diametro_cono_ent = st.sidebar.slider("Diámetro Cono Entrada", min_value=0.1*D, max_value=0.4*D, value=0.2*D)
-    diametro_cono_sal = st.sidebar.slider("Diámetro Cono Salida", min_value=0.05*D, max_value=0.3*D, value=0.15*D)
+    diametro_cono_ent = st.sidebar.slider("Diámetro Cono Entrada", min_value=0.1*D, max_value=0.5*D, value=0.25*D)
+    diametro_cono_sal = st.sidebar.slider("Diámetro Cono Salida", min_value=0.05*D, max_value=0.4*D, value=0.15*D)
 
-st.sidebar.subheader("📐 Perfil Paso / Diámetro (P/D)")
-pd02 = st.sidebar.slider("P/D r/R=0.2", 0.5, 1.8, 1.0, 0.05)
-pd07 = st.sidebar.slider("P/D r/R=0.7", 0.5, 1.8, 1.0, 0.05)
-pd10 = st.sidebar.slider("P/D r/R=1.0", 0.5, 1.8, 1.0, 0.05)
-
-# Interpolación P/D
-x_pd = np.array([0.2, 0.7, 1.0])
-y_pd = np.array([pd02, pd07, pd10])
-poly_pd = np.polyfit(x_pd, y_pd, 2)
-
-def get_pd(r_R):
-    return poly_pd[0]*(r_R**2) + poly_pd[1]*r_R + poly_pd[2]
+st.sidebar.subheader("📐 Relación Paso / Diámetro (P/D)")
+PD_global = st.sidebar.slider("Paso / Diámetro (P/D)", min_value=0.5, max_value=1.8, value=1.0, step=0.05)
 
 # ==========================================
 # CÁLCULO GEOMÉTRICO
@@ -61,7 +50,7 @@ def obtener_parametros(tipo, fskw_num):
     
     return angrake, K, CSkew, Ctmax
 
-def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
+def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
     angrake, K, CSkew, Ctmax = obtener_parametros(tipo, fskw_val)
     n_secciones = len(K)
     
@@ -69,8 +58,7 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
     
     for i in range(n_secciones):
         rsR = (i + 1.0) / 10.0
-        PD = get_pd(rsR)
-        paso = PD * D_val
+        paso = pd_val * D_val
         alfa = np.arctan(paso / (np.pi * rsR * D_val))
         
         c = (D_val * FaF_val * K[i]) / Z_val
@@ -103,27 +91,44 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
         
     return np.array(secciones_pts)
 
+def generar_cono_trunco(r_entrada, r_salida, largo, n_p=32):
+    """Genera un cono trunco opaco (geometría de revolución)"""
+    y_vals = np.linspace(-largo/2, largo/2, 2)
+    r_vals = np.linspace(r_entrada, r_salida, 2)
+    theta = np.linspace(0, 2*np.pi, n_p)
+    
+    grid_r, grid_theta = np.meshgrid(r_vals, theta)
+    _, grid_y = np.meshgrid(r_vals, y_vals)
+    
+    x = grid_r.T * np.cos(grid_theta.T)
+    z = grid_r.T * np.sin(grid_theta.T)
+    y = grid_y
+    
+    grid = pv.StructuredGrid(x, y, z)
+    return grid.extract_surface().triangulate()
+
 # ==========================================
-# CONSTRUCCIÓN DE GEOMETRÍA PYVISTA -> PLOTLY
+# RENDERING 3D CON PLOTLY
 # ==========================================
 fig = go.Figure()
 
-# 1. Cono Central
+# 1. Cono Central Trunco (Totalmente Opaco)
 largo_cono = D * 0.4
-cono = pv.Cone(center=(0, 0, 0), direction=(0, 1, 0), 
-               height=largo_cono, radius=diametro_cono_ent/2.0, resolution=32).triangulate()
+r_ent = diametro_cono_ent / 2.0
+r_sal = diametro_cono_sal / 2.0
 
-cono_pts = cono.points
-cono_faces = cono.faces.reshape(-1, 4)[:, 1:]
+cono_mesh = generar_cono_trunco(r_ent, r_sal, largo_cono)
+cono_pts = cono_mesh.points
+cono_faces = cono_mesh.faces.reshape(-1, 4)[:, 1:]
 
 fig.add_trace(go.Mesh3d(
     x=cono_pts[:, 0], y=cono_pts[:, 1], z=cono_pts[:, 2],
     i=cono_faces[:, 0], j=cono_faces[:, 1], k=cono_faces[:, 2],
-    color="gold", opacity=0.9, name="Cono Central"
+    color="gold", opacity=1.0, name="Cono Central", flatshading=True
 ))
 
-# 2. Palas
-pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw)
+# 2. Palas (Totalmente Opacas)
+pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw, PD_global)
 
 n_sec, n_pts, _ = pala_pts.shape
 grid = pv.StructuredGrid()
@@ -140,7 +145,7 @@ for i in range(Z):
     fig.add_trace(go.Mesh3d(
         x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
-        color="deepskyblue", opacity=0.85, name=f"Pala {i+1}"
+        color="deepskyblue", opacity=1.0, name=f"Pala {i+1}", flatshading=True
     ))
 
 fig.update_layout(
@@ -166,6 +171,7 @@ with col_info:
     st.subheader("📊 Métricas Estimadas")
     volumen_est = (np.pi * (D/2)**2 * 0.05) * FaF * (Z / 4)
     st.metric(label="Diámetro Exterior", value=f"{D:.2f} m")
-    st.metric(label="Paso a r/R=0.7", value=f"{(pd07*D):.2f} m")
+    st.metric(label="Paso Hélice (P)", value=f"{(PD_global * D):.2f} m")
+    st.metric(label="Relación P/D", value=f"{PD_global:.2f}")
     st.metric(label="Volumen Aprox. Palas", value=f"{volumen_est:.4f} m³")
     st.metric(label="Peso Aprox. (Bronce)", value=f"{volumen_est * 8500:.1f} kg")
