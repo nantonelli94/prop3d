@@ -1,16 +1,14 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import numpy as np
 import pyvista as pv
-import tempfile
-import os
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="wide")
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
 
-# Configurar PyVista para servidor sin pantalla (Headless rendering)
+# Configurar PyVista en modo sin pantalla
 pv.OFF_SCREEN = True
 
 # ==========================================
@@ -106,16 +104,23 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
     return np.array(secciones_pts)
 
 # ==========================================
-# RENDERIZADO 3D CON PYVISTA
+# CONSTRUCCIÓN DE GEOMETRÍA PYVISTA -> PLOTLY
 # ==========================================
-plotter = pv.Plotter(off_screen=True)
-plotter.set_background("#1e1e1e")
+fig = go.Figure()
 
 # 1. Cono Central
 largo_cono = D * 0.4
 cono = pv.Cone(center=(0, 0, 0), direction=(0, 1, 0), 
-               height=largo_cono, radius=diametro_cono_ent/2.0, resolution=32)
-plotter.add_mesh(cono, color="gold", metallic=0.8, smooth_shading=True)
+               height=largo_cono, radius=diametro_cono_ent/2.0, resolution=32).triangulate()
+
+cono_pts = cono.points
+cono_faces = cono.faces.reshape(-1, 4)[:, 1:]
+
+fig.add_trace(go.Mesh3d(
+    x=cono_pts[:, 0], y=cono_pts[:, 1], z=cono_pts[:, 2],
+    i=cono_faces[:, 0], j=cono_faces[:, 1], k=cono_faces[:, 2],
+    color="gold", opacity=0.9, name="Cono Central"
+))
 
 # 2. Palas
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw)
@@ -124,16 +129,30 @@ n_sec, n_pts, _ = pala_pts.shape
 grid = pv.StructuredGrid()
 grid.points = pala_pts.reshape(-1, 3)
 grid.dimensions = [n_pts, n_sec, 1]
+grid_poly = grid.extract_surface().triangulate()
 
 angulo_pala = 360.0 / Z
 for i in range(Z):
-    pala_rotada = grid.rotate_y(i * angulo_pala, inplace=False)
-    plotter.add_mesh(pala_rotada, color="cyan", show_edges=False, metallic=0.5, smooth_shading=True)
+    pala_rotada = grid_poly.rotate_y(i * angulo_pala, inplace=False)
+    pts = pala_rotada.points
+    faces = pala_rotada.faces.reshape(-1, 4)[:, 1:]
+    
+    fig.add_trace(go.Mesh3d(
+        x=pts[:, 0], y=pts[:, 1], z=pts[:, 2],
+        i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+        color="deepskyblue", opacity=0.85, name=f"Pala {i+1}"
+    ))
 
-# Exportar escena 3D a un archivo HTML interactivo estático
-temp_dir = tempfile.gettempdir()
-path_html = os.path.join(temp_dir, "propeller.html")
-plotter.export_html(path_html)
+fig.update_layout(
+    scene=dict(
+        aspectmode="data",
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        zaxis=dict(visible=False)
+    ),
+    margin=dict(l=0, r=0, b=0, t=0),
+    height=600
+)
 
 # ==========================================
 # MOSTRAR EN STREAMLIT
@@ -141,9 +160,7 @@ plotter.export_html(path_html)
 col_view, col_info = st.columns([3, 1])
 
 with col_view:
-    with open(path_html, 'r', encoding='utf-8') as f:
-        html_content = f.read()
-    components.html(html_content, height=600, scrolling=False)
+    st.plotly_chart(fig, use_container_width=True)
 
 with col_info:
     st.subheader("📊 Métricas Estimadas")
