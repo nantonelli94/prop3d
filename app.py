@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Generador de Hélices Paramétricas 3D - UTN FRMDP", layout="wide")
 
 # ==========================================
-# ESTILO CSS: FONDO GRIS Y TEXTO INSTITUCIONAL
+# ESTILO CSS: FONDO GRIS Y LEYENDAS
 # ==========================================
 st.markdown(
     """
@@ -19,33 +19,18 @@ st.markdown(
     section[data-testid="stSidebar"] {
         background-color: #262626;
     }
-    .text-center {
-        text-align: center;
-    }
     .sub-caption {
         text-align: center;
         font-style: italic;
         color: #aaaaaa;
-        font-size: 0.9em;
+        font-size: 0.8em;
+        margin-top: 5px;
         margin-bottom: 15px;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
-
-# ==========================================
-# ENCABEZADO INSTITUCIONAL Y LOGO
-# ==========================================
-col_logo_izq, col_logo_centro, col_logo_der = st.columns([35, 30, 35])
-with col_logo_centro:
-    try:
-        st.image("logo_tdb2.jpg", use_container_width=True)
-    except:
-        pass
-
-st.markdown("<h2 class='text-center'>UTN FRMDP — Cátedra Teoría del Buque 2</h2>", unsafe_allow_html=True)
-st.markdown("<p class='sub-caption'>⚠️ Herramienta interactiva desarrollada exclusivamente con fines didácticos</p>", unsafe_allow_html=True)
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
@@ -248,10 +233,17 @@ with col_view:
     st.plotly_chart(fig, use_container_width=True)
 
 with col_info:
+    # Logo e información institucional en la columna lateral de métricas
+    try:
+        st.image("logo_tdb2.jpg", use_container_width=True)
+    except:
+        pass
+        
+    st.markdown("<p class='sub-caption'>UTN FRMDP — Teoría del Buque 2<br>Uso exclusivamente didáctico</p>", unsafe_allow_html=True)
+    
     st.subheader("📊 Métricas Estimadas")
     volumen_est = (np.pi * (D/2)**2 * 0.05) * FaF * (Z / 4)
     st.metric(label="Diámetro Exterior", value=f"{D:.2f} m")
     st.metric(label="Paso Hélice (P)", value=f"{(PD_global * D):.2f} m")
-    st.metric(label="Relación P/D", value=f"{PD_global:.2f}")
     st.metric(label="Volumen Aprox. Palas", value=f"{volumen_est:.4f} m³")
     st.metric(label="Peso Aprox. (Bronce)", value=f"{volumen_est * 8500:.1f} kg")
