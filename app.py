@@ -32,7 +32,7 @@ pd02 = st.sidebar.slider("P/D r/R=0.2", 0.5, 1.8, 1.0, 0.05)
 pd07 = st.sidebar.slider("P/D r/R=0.7", 0.5, 1.8, 1.0, 0.05)
 pd10 = st.sidebar.slider("P/D r/R=1.0", 0.5, 1.8, 1.0, 0.05)
 
-# Interpolación P/D
+# Interpolación P/D (Corregido con np.polyfit)
 x_pd = np.array([0.2, 0.7, 1.0])
 y_pd = np.array([pd02, pd07, pd10])
 poly_pd = np.polyfit(x_pd, y_pd, 2)
@@ -66,7 +66,7 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
     secciones_pts = []
     
     for i in range(n_secciones):
-        rsR = (i + 1.0) / 10.0 if tipo == 1 else (i + 1.0) / 10.0
+        rsR = (i + 1.0) / 10.0
         PD = get_pd(rsR)
         paso = PD * D_val
         alfa = np.arctan(paso / (np.pi * rsR * D_val))
@@ -76,7 +76,7 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
         tmax = D_val * Ctmax[i]
         rake = np.tan(angrake) * rsR * (D_val / 2.0)
         
-        # Generar perfil hidrodinámico simplificado (Gotera/NACA)
+        # Generar perfil hidrodinámico
         t = np.linspace(0, 1, 30)
         x_perfil = c * (t - 0.5)
         
@@ -86,17 +86,13 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
         # Puntos Cara Extradós e Intradós
         x_pts = np.concatenate([x_perfil, x_perfil[::-1]])
         y_pts = np.concatenate([yt, -yt[::-1]])
-        z_pts = np.zeros_like(x_pts)
         
-        # Rotaciones y transformaciones locales
-        # 1. Ajuste Skew
+        # Transformaciones
         x_pts += skew
         
-        # 2. Rotación por Ángulo de Paso (alfa)
         x_rot = x_pts * np.cos(alfa) - y_pts * np.sin(alfa)
         y_rot = x_pts * np.sin(alfa) + y_pts * np.cos(alfa)
         
-        # 3. Conversión a Cilíndricas (enrollado al radio rsR * D / 2)
         r = (D_val / 2.0) * rsR
         theta = x_rot / r
         
@@ -115,16 +111,15 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
 plotter = pv.Plotter(window_size=[800, 600])
 plotter.set_background("#1e1e1e")
 
-# 1. Generar Cono Central
+# 1. Generar Cono Central (Corregido: smooth_shading=True)
 largo_cono = D * 0.4
 cono = pv.Cone(center=(0, 0, 0), direction=(0, 1, 0), 
                height=largo_cono, radius=diametro_cono_ent/2.0, resolution=32)
-plotter.add_mesh(cono, color="gold", metallic=0.8, smoothness=1.0)
+plotter.add_mesh(cono, color="gold", metallic=0.8, smooth_shading=True)
 
-# 2. Generar Palas
+# 2. Generar Palas (Corregido: smooth_shading=True)
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw)
 
-# Estructurar malla de superficie con PyVista StructuredGrid
 n_sec, n_pts, _ = pala_pts.shape
 grid = pv.StructuredGrid()
 grid.points = pala_pts.reshape(-1, 3)
@@ -134,7 +129,7 @@ grid.dimensions = [n_pts, n_sec, 1]
 angulo_pala = 360.0 / Z
 for i in range(Z):
     pala_rotada = grid.rotate_y(i * angulo_pala, inplace=False)
-    plotter.add_mesh(pala_rotada, color="cyan", show_edges=False, metallic=0.5, smoothness=0.8)
+    plotter.add_mesh(pala_rotada, color="cyan", show_edges=False, metallic=0.5, smooth_shading=True)
 
 plotter.add_axes()
 
