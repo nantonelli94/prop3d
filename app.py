@@ -32,7 +32,7 @@ st.sidebar.subheader("📐 Relación Paso / Diámetro (P/D)")
 PD_global = st.sidebar.slider("Paso / Diámetro (P/D)", min_value=0.5, max_value=1.8, value=1.0, step=0.05)
 
 # ==========================================
-# CÁLCULO GEOMÉTRICO
+# CÁLCULO GEOMÉTRICO DE LAS PALAS
 # ==========================================
 def obtener_parametros(tipo, fskw_num):
     if tipo == 1: # Kaplan
@@ -91,43 +91,55 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val, pd_val):
         
     return np.array(secciones_pts)
 
-def generar_cono_trunco(r_entrada, r_salida, largo, n_p=32):
-    """Genera un cono trunco opaco (geometría de revolución)"""
-    y_vals = np.linspace(-largo/2, largo/2, 2)
-    r_vals = np.linspace(r_entrada, r_salida, 2)
-    theta = np.linspace(0, 2*np.pi, n_p)
+def generar_datos_cono_trunco(r_entrada, r_salida, largo, n_p=32):
+    """Genera coordenadas de vértices e índices de triángulos para Plotly"""
+    y_vals = np.array([-largo/2, largo/2])
+    r_vals = np.array([r_entrada, r_salida])
+    theta = np.linspace(0, 2*np.pi, n_p, endpoint=False)
     
-    grid_r, grid_theta = np.meshgrid(r_vals, theta)
-    _, grid_y = np.meshgrid(r_vals, y_vals)
+    x = np.outer(r_vals, np.cos(theta)).flatten()
+    z = np.outer(r_vals, np.sin(theta)).flatten()
+    y = np.repeat(y_vals, n_p)
     
-    x = grid_r.T * np.cos(grid_theta.T)
-    z = grid_r.T * np.sin(grid_theta.T)
-    y = grid_y
-    
-    grid = pv.StructuredGrid(x, y, z)
-    return grid.extract_surface().triangulate()
+    i_list, j_list, k_list = [], [], []
+    for idx in range(n_p):
+        next_idx = (idx + 1) % n_p
+        r0_curr = idx
+        r0_next = next_idx
+        r1_curr = idx + n_p
+        r1_next = next_idx + n_p
+        
+        # Triángulo 1
+        i_list.append(r0_curr)
+        j_list.append(r1_curr)
+        k_list.append(r0_next)
+        
+        # Triángulo 2
+        i_list.append(r0_next)
+        j_list.append(r1_curr)
+        k_list.append(r1_next)
+        
+    return x, y, z, i_list, j_list, k_list
 
 # ==========================================
-# RENDERING 3D CON PLOTLY
+# CONSTRUCCIÓN DE LA ESCENA EN PLOTLY
 # ==========================================
 fig = go.Figure()
 
-# 1. Cono Central Trunco (Totalmente Opaco)
+# 1. Cono Central Trunco (Opaco)
 largo_cono = D * 0.4
 r_ent = diametro_cono_ent / 2.0
 r_sal = diametro_cono_sal / 2.0
 
-cono_mesh = generar_cono_trunco(r_ent, r_sal, largo_cono)
-cono_pts = cono_mesh.points
-cono_faces = cono_mesh.faces.reshape(-1, 4)[:, 1:]
+x_c, y_c, z_c, i_c, j_c, k_c = generar_datos_cono_trunco(r_ent, r_sal, largo_cono)
 
 fig.add_trace(go.Mesh3d(
-    x=cono_pts[:, 0], y=cono_pts[:, 1], z=cono_pts[:, 2],
-    i=cono_faces[:, 0], j=cono_faces[:, 1], k=cono_faces[:, 2],
+    x=x_c, y=y_c, z=z_c,
+    i=i_c, j=j_c, k=k_c,
     color="gold", opacity=1.0, name="Cono Central", flatshading=True
 ))
 
-# 2. Palas (Totalmente Opacas)
+# 2. Palas de la Hélice (Opacas)
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw, PD_global)
 
 n_sec, n_pts, _ = pala_pts.shape
@@ -160,7 +172,7 @@ fig.update_layout(
 )
 
 # ==========================================
-# MOSTRAR EN STREAMLIT
+# DESPLIEGUE EN STREAMLIT
 # ==========================================
 col_view, col_info = st.columns([3, 1])
 
