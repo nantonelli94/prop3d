@@ -1,13 +1,17 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 from scipy.interpolate import CubicSpline
 import pyvista as pv
-from stpyvista import stpyvista
+import tempfile
 
 st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="wide")
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
+
+# Configurar PyVista para servidores Headless
+pv.start_xvfb()
 
 # ==========================================
 # BARRA LATERAL: CONTROLES
@@ -32,7 +36,7 @@ pd02 = st.sidebar.slider("P/D r/R=0.2", 0.5, 1.8, 1.0, 0.05)
 pd07 = st.sidebar.slider("P/D r/R=0.7", 0.5, 1.8, 1.0, 0.05)
 pd10 = st.sidebar.slider("P/D r/R=1.0", 0.5, 1.8, 1.0, 0.05)
 
-# Interpolación P/D (Corregido con np.polyfit)
+# Interpolación P/D
 x_pd = np.array([0.2, 0.7, 1.0])
 y_pd = np.array([pd02, pd07, pd10])
 poly_pd = np.polyfit(x_pd, y_pd, 2)
@@ -76,18 +80,14 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
         tmax = D_val * Ctmax[i]
         rake = np.tan(angrake) * rsR * (D_val / 2.0)
         
-        # Generar perfil hidrodinámico
         t = np.linspace(0, 1, 30)
         x_perfil = c * (t - 0.5)
         
-        # Espesor parabólico
         yt = 5 * tmax * (0.2969*np.sqrt(t) - 0.1260*t - 0.3516*t**2 + 0.2843*t**3 - 0.1015*t**4)
         
-        # Puntos Cara Extradós e Intradós
         x_pts = np.concatenate([x_perfil, x_perfil[::-1]])
         y_pts = np.concatenate([yt, -yt[::-1]])
         
-        # Transformaciones
         x_pts += skew
         
         x_rot = x_pts * np.cos(alfa) - y_pts * np.sin(alfa)
@@ -106,18 +106,18 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
     return np.array(secciones_pts)
 
 # ==========================================
-# RENDERIZADO 3D CON PYVISTA
+# RENDERIZADO 3D CON PYVISTA (EXPORTADO A HTML)
 # ==========================================
-plotter = pv.Plotter(window_size=[800, 600])
+plotter = pv.Plotter(notebook=False)
 plotter.set_background("#1e1e1e")
 
-# 1. Generar Cono Central (Corregido: smooth_shading=True)
+# 1. Cono Central
 largo_cono = D * 0.4
 cono = pv.Cone(center=(0, 0, 0), direction=(0, 1, 0), 
                height=largo_cono, radius=diametro_cono_ent/2.0, resolution=32)
 plotter.add_mesh(cono, color="gold", metallic=0.8, smooth_shading=True)
 
-# 2. Generar Palas (Corregido: smooth_shading=True)
+# 2. Palas
 pala_pts = generar_malla_pala(D, Z, FaF, tipo_helice, fskw)
 
 n_sec, n_pts, _ = pala_pts.shape
@@ -125,13 +125,15 @@ grid = pv.StructuredGrid()
 grid.points = pala_pts.reshape(-1, 3)
 grid.dimensions = [n_pts, n_sec, 1]
 
-# Duplicar y rotar las Z palas
 angulo_pala = 360.0 / Z
 for i in range(Z):
     pala_rotada = grid.rotate_y(i * angulo_pala, inplace=False)
     plotter.add_mesh(pala_rotada, color="cyan", show_edges=False, metallic=0.5, smooth_shading=True)
 
-plotter.add_axes()
+# Exportar a HTML interactivo sin hilos/multiprocessing
+with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
+    path_html = tf.name
+    plotter.export_html(path_html)
 
 # ==========================================
 # MOSTRAR EN STREAMLIT
@@ -139,7 +141,9 @@ plotter.add_axes()
 col_view, col_info = st.columns([3, 1])
 
 with col_view:
-    stpyvista(plotter)
+    with open(path_html, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    components.html(html_content, height=600, scrolling=False)
 
 with col_info:
     st.subheader("📊 Métricas Estimadas")
