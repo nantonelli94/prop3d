@@ -1,17 +1,17 @@
 import streamlit as st
 import streamlit.components.v1 as components
 import numpy as np
-from scipy.interpolate import CubicSpline
 import pyvista as pv
 import tempfile
+import os
 
 st.set_page_config(page_title="Generador de Hélices Paramétricas 3D", layout="wide")
 
 st.title("⚓ Generador de Hélices Paramétricas 3D")
 st.markdown("Modifica los parámetros geométricos en la barra lateral para reconstruir la hélice en tiempo real.")
 
-# Configurar PyVista para servidores Headless
-pv.start_xvfb()
+# Configurar PyVista para servidor sin pantalla (Headless rendering)
+pv.OFF_SCREEN = True
 
 # ==========================================
 # BARRA LATERAL: CONTROLES
@@ -47,7 +47,7 @@ def get_pd(r_R):
 # ==========================================
 # CÁLCULO GEOMÉTRICO
 # ==========================================
-def obtener_parametros(tipo, Z_num, FaF_num, fskw_num):
+def obtener_parametros(tipo, fskw_num):
     if tipo == 1: # Kaplan
         angrake = 0.0
         K = [1.168, 1.322, 1.508, 1.677, 1.831, 1.970, 2.084, 2.167, 2.218, 2.219]
@@ -64,7 +64,7 @@ def obtener_parametros(tipo, Z_num, FaF_num, fskw_num):
     return angrake, K, CSkew, Ctmax
 
 def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
-    angrake, K, CSkew, Ctmax = obtener_parametros(tipo, Z_val, FaF_val, fskw_val)
+    angrake, K, CSkew, Ctmax = obtener_parametros(tipo, fskw_val)
     n_secciones = len(K)
     
     secciones_pts = []
@@ -106,9 +106,9 @@ def generar_malla_pala(D_val, Z_val, FaF_val, tipo, fskw_val):
     return np.array(secciones_pts)
 
 # ==========================================
-# RENDERIZADO 3D CON PYVISTA (EXPORTADO A HTML)
+# RENDERIZADO 3D CON PYVISTA
 # ==========================================
-plotter = pv.Plotter(notebook=False)
+plotter = pv.Plotter(off_screen=True)
 plotter.set_background("#1e1e1e")
 
 # 1. Cono Central
@@ -130,10 +130,10 @@ for i in range(Z):
     pala_rotada = grid.rotate_y(i * angulo_pala, inplace=False)
     plotter.add_mesh(pala_rotada, color="cyan", show_edges=False, metallic=0.5, smooth_shading=True)
 
-# Exportar a HTML interactivo sin hilos/multiprocessing
-with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tf:
-    path_html = tf.name
-    plotter.export_html(path_html)
+# Exportar escena 3D a un archivo HTML interactivo estático
+temp_dir = tempfile.gettempdir()
+path_html = os.path.join(temp_dir, "propeller.html")
+plotter.export_html(path_html)
 
 # ==========================================
 # MOSTRAR EN STREAMLIT
